@@ -1,26 +1,6 @@
 # ================================================================
 # ULTIMATE REAL‑TIME QUANT TERMINAL – TOURNAMENT EDITION v26 (FINAL FIX)
-# ================================================================
-# Description: Fully institutional‑grade terminal for Binance Futures.
-#              Top 10 high‑volatility coins scanned simultaneously.
-#              Real‑time order book depth, differential OFI, volume profile,
-#              CVD, OI delta, and Bayesian fusion.
-#              NO REST API calls – all data from WebSocket streams.
-#              Golden mini‑table, cached resources, DB timeout fixed.
-#              COMPLETE Trade History (with CSV export) & Performance tabs.
-#              Fixed "Signal data stale" warnings (threshold 120s).
-#              Professional Bayesian fusion formatting.
-#              Live clock displayed.
-#              Ultra‑low latency, cloud‑deployable.
-#              AUTO-TRADING REMOVED – manual signals only.
-#              Backtesting: fixed resample frequency, candle‑based indicators,
-#              pagination loop limit, OI fallback, multi‑TF bias forward‑fill.
-#              FIXED: Futures WebSocket URLs for live data.
-#              NEW: Active Walls Table (top 5 bids/asks with size & USD value).
-#              NEW: Funding Rate + OI Chart (historical view).
-#              NEW: Market Bias (Buy/Sell % from CVD & volume).
-#              FIX: Removed unsupported `version` parameter from cache decorator.
-#                    Changed cache function name to force refresh.
+# + 4 SPEED & VISIBILITY IMPROVEMENTS (Auto-refresh, Caching, Latency, Pulse)
 # ================================================================
 
 import time
@@ -278,7 +258,7 @@ class BinanceMultiStreamProcessor:
         self.price_history = {s: deque(maxlen=100) for s in symbols}
         self.volume_history = {s: deque(maxlen=100) for s in symbols}
         self.oi_history = {s: deque(maxlen=100) for s in symbols}
-        self.funding_rate_history = {s: deque(maxlen=100) for s in symbols}  # NEW: store funding rates
+        self.funding_rate_history = {s: deque(maxlen=100) for s in symbols}
         self.liquidation_count = {s: 0 for s in symbols}
         self.last_update = time.time()
         self.lock = threading.RLock()
@@ -386,14 +366,14 @@ class BinanceMultiStreamProcessor:
                 continue
             oi = float(mp.get('oi', 0))
             mark_price = float(mp.get('p', 0))
-            funding_rate = float(mp.get('r', 0))  # NEW: funding rate
+            funding_rate = float(mp.get('r', 0))
             with self.lock:
                 self.oi_history[s].append(oi)
-                self.funding_rate_history[s].append(funding_rate)  # NEW
+                self.funding_rate_history[s].append(funding_rate)
             self.store.set(f"mark:{s}", {
                 'open_interest': oi,
                 'mark_price': mark_price,
-                'funding_rate': funding_rate,  # NEW
+                'funding_rate': funding_rate,
                 'timestamp': mp.get('E', time.time())
             }, ex=60)
 
@@ -487,7 +467,7 @@ class InstitutionalSignalEngine:
         price = mini['price']
         volume = mini['volume']
         oi = mark['open_interest']
-        funding_rate = mark.get('funding_rate', 0.0)  # NEW
+        funding_rate = mark.get('funding_rate', 0.0)
 
         oi_delta = 0.0
         if len(oi_history) >= 2:
@@ -1829,7 +1809,6 @@ class DepthStream(threading.Thread):
     def __init__(self, symbol, depth_levels=10):
         super().__init__(daemon=True)
         self.symbol = symbol
-        # FIX: Futures WebSocket
         self.ws_url = f"wss://fstream.binance.com/ws/{symbol.lower()}@depth{depth_levels}@100ms"
         self.orderbook = {'bids': [], 'asks': []}
         self.last_update = time.time()
@@ -1869,7 +1848,6 @@ class DepthStream(threading.Thread):
 def get_global_store():
     return RedisSignalStore(host='localhost', port=6379)
 
-# NEW: Cache function with new name to force refresh (version removed)
 @st.cache_resource
 def get_multi_processor_v2(_store):
     processor = BinanceMultiStreamProcessor(_store, TOP_COINS)
@@ -1889,14 +1867,15 @@ def get_signal_updater(_store, _processor, _depth_stream):
     return updater
 
 # =====================================================================
-# 24. STREAMLIT UI – ULTIMATE LUXURY DASHBOARD v26 (FINAL FIX)
+# 24. STREAMLIT UI – IMPROVED WITH CACHING & LATENCY & PULSE
 # =====================================================================
 st.set_page_config(page_title="🏆 Supreme Scalper - Tournament Pro", layout="wide", initial_sidebar_state="expanded")
 
+# ------ AUTO-REFRESH (Fix 1) ------
 if st_autorefresh:
     st_autorefresh(interval=1000, key="auto_refresh")
 
-# ---------- Premium CSS ----------
+# ---------- Premium CSS (added pulse animations) ----------
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
@@ -2079,6 +2058,26 @@ st.markdown("""
     }
     .wall-table .bid { color: #10b981; }
     .wall-table .ask { color: #ef4444; }
+
+    /* ---- PULSE ANIMATION (Fix 4) ---- */
+    @keyframes pulse-green {
+        0% { background-color: rgba(16, 185, 129, 0); }
+        50% { background-color: rgba(16, 185, 129, 0.25); }
+        100% { background-color: rgba(16, 185, 129, 0); }
+    }
+    @keyframes pulse-red {
+        0% { background-color: rgba(239, 68, 68, 0); }
+        50% { background-color: rgba(239, 68, 68, 0.25); }
+        100% { background-color: rgba(239, 68, 68, 0); }
+    }
+    @keyframes pulse-neutral {
+        0% { background-color: rgba(107, 114, 128, 0); }
+        50% { background-color: rgba(107, 114, 128, 0.15); }
+        100% { background-color: rgba(107, 114, 128, 0); }
+    }
+    .flash-green { animation: pulse-green 0.8s ease 1; }
+    .flash-red { animation: pulse-red 0.8s ease 1; }
+    .flash-neutral { animation: pulse-neutral 0.8s ease 1; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -2118,7 +2117,6 @@ Use signals only as an advanced reference – not financial advice.
 
 # ---------- Initialise Cached Resources ----------
 store = get_global_store()
-# Using new cache function to force refresh
 multi_processor = get_multi_processor_v2(store)
 multi_depth_stream = get_multi_depth_stream()
 signal_updater = get_signal_updater(store, multi_processor, multi_depth_stream)
@@ -2158,7 +2156,6 @@ if 'ws_queue' not in st.session_state:
     st.session_state['ws_thread'] = None
     st.session_state['ws_stop_event'] = threading.Event()
     st.session_state['trade_manager'] = TradeManager()
-    # Set db_writer from session state (already created)
     st.session_state['trade_manager'].set_db_writer(st.session_state.get('db_writer'))
     st.session_state['ofi_history'] = deque(maxlen=100)
     st.session_state['cvd_history'] = deque(maxlen=100)
@@ -2167,7 +2164,6 @@ if 'ws_queue' not in st.session_state:
 
 def ws_worker(symbol, q, stop_event):
     clean_sym = symbol.replace('/', '').lower()
-    # FIX: Futures WebSocket
     ws_url = f"wss://fstream.binance.com/ws/{clean_sym}@trade"
     while not stop_event.is_set():
         try:
@@ -2387,13 +2383,27 @@ suggested_tp_long = current_price + 3 * current_atr if current_atr > 0 else curr
 suggested_sl_short = current_price + 2 * current_atr if current_atr > 0 else current_price * 1.002
 suggested_tp_short = current_price - 3 * current_atr if current_atr > 0 else current_price * 0.996
 
-# -------- AUTO-TRADING REMOVED FOR MANUAL MODE ----------
-# (commented out)
-
 # =====================================================================
-# UI LAYOUT – LUXURY DASHBOARD v26 (FINAL FIX)
+# UI LAYOUT – LUXURY DASHBOARD v26 (FINAL FIX + IMPROVEMENTS)
 # =====================================================================
 current_time_str = datetime.now(timezone.utc).strftime("%H:%M:%S")
+
+# ---- LATENCY INDICATOR (Fix 3) ----
+if multi_processor:
+    latency_ms = int((time.time() - multi_processor.last_update) * 1000)
+    if latency_ms > 5000:
+        latency_color = "#ef4444"
+        latency_text = "SLOW"
+    elif latency_ms > 2000:
+        latency_color = "#f59e0b"
+        latency_text = "MEDIUM"
+    else:
+        latency_color = "#10b981"
+        latency_text = "FAST"
+else:
+    latency_ms = 9999
+    latency_color = "#ef4444"
+    latency_text = "OFF"
 
 st.markdown("""
 <div class="luxury-header">
@@ -2406,10 +2416,13 @@ st.markdown("""
             <span style="color: #fbbf24; font-size: 12px;">LIVE</span>
             <span style="color: #10b981;">●</span>
             <span class="live-clock">{}</span>
+            <span style="background: rgba(0,0,0,0.3); padding: 2px 12px; border-radius: 12px; border: 1px solid {}; font-size: 11px; font-weight: 600; color: {};">
+                ⚡ {} ({} ms)
+            </span>
         </div>
     </div>
 </div>
-""".format(current_time_str), unsafe_allow_html=True)
+""".format(current_time_str, latency_color, latency_color, latency_text, latency_ms), unsafe_allow_html=True)
 
 tab1, tab2, tab3, tab4 = st.tabs(["📈 Live Dashboard", "📜 Trade History", "🏆 Performance", "📊 Backtest"])
 
@@ -2595,14 +2608,12 @@ with tab1:
         oi_history = multi_processor.get_oi_history(selected_asset)
 
         if funding_rates and oi_history:
-            # Ensure lengths match
             min_len = min(len(funding_rates), len(oi_history))
             fr_data = funding_rates[-min_len:]
             oi_data = oi_history[-min_len:]
-            # Create dataframe for chart
             df_fr_oi = pd.DataFrame({
                 'Funding Rate': fr_data,
-                'OI (normalized)': np.array(oi_data) / (np.max(oi_data) + 1e-6)  # normalize for display
+                'OI (normalized)': np.array(oi_data) / (np.max(oi_data) + 1e-6)
             })
             st.line_chart(df_fr_oi)
         else:
@@ -2613,7 +2624,6 @@ with tab1:
         st.markdown("### 🧱 Active Walls (Top 5 BID/ASK)")
         ob = multi_depth.get_orderbook(selected_asset) if multi_depth else {}
         if ob and ob.get('bids') and ob.get('asks'):
-            # Build table
             bid_rows = []
             ask_rows = []
             for b in ob['bids'][:5]:
@@ -2824,6 +2834,9 @@ with tab1:
         for row in data_rows:
             sig_class = "signal-long" if row["Signal"] == "LONG" else "signal-short" if row["Signal"] == "SHORT" else "signal-neutral"
             price_class = "price-up" if row["Change"] > 0 else "price-down" if row["Change"] < 0 else ""
+            # Apply flash class based on price change (simplified: flash on every update)
+            # We'll just add a generic flash class to the whole row? But we can't in static HTML.
+            # Instead, we use the card-value flash in the cards below.
             table_html += f"""
                 <tr>
                     <td class="symbol-col">{row["Asset"]}</td>
@@ -2847,9 +2860,26 @@ with tab1:
 
     st.markdown("---")
 
-    # ---- CARDS ----
+    # ---- CARDS (with flash classes based on price change) ----
+    # Determine flash class for price card
+    if current_price > 0:
+        # Simple: if price increased compared to previous price (we don't have previous stored, but we can use change from mini ticker)
+        # We'll use the change from mini for the selected asset.
+        change_pct = 0.0
+        mini_sel = store.get(f"mini:{selected_asset}")
+        if mini_sel:
+            change_pct = mini_sel.get('change', 0.0)
+        if change_pct > 0:
+            flash_class = "flash-green"
+        elif change_pct < 0:
+            flash_class = "flash-red"
+        else:
+            flash_class = "flash-neutral"
+    else:
+        flash_class = ""
+
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.markdown(f'<div class="card-gold"><div class="card-title">Price</div><div class="card-value">${current_price:,.2f}</div><div class="card-sub">VWAP: ${session_vwap:,.2f}</div></div>', unsafe_allow_html=True)
+    c1.markdown(f'<div class="card-gold {flash_class}"><div class="card-title">Price</div><div class="card-value">${current_price:,.2f}</div><div class="card-sub">VWAP: ${session_vwap:,.2f}</div></div>', unsafe_allow_html=True)
     c2.markdown(f'<div class="card-gold"><div class="card-title">D‑OFI</div><div class="card-value">{ofi_full:+.3f}</div><div class="card-sub">Micro: ${microprice:,.2f}</div></div>', unsafe_allow_html=True)
     c3.markdown(f'<div class="card-gold"><div class="card-title">CVD</div><div class="card-value">{current_cvd:,.0f}</div></div>', unsafe_allow_html=True)
     c4.markdown(f'<div class="card-gold"><div class="card-title">VPIN</div><div class="card-value">{real_vpin:.3f}</div></div>', unsafe_allow_html=True)
@@ -2887,15 +2917,19 @@ with tab1:
     components.html(tv_code, height=510)
 
 # =====================================================================
-# TAB 2: TRADE HISTORY
+# TAB 2: TRADE HISTORY (with caching – Fix 2)
 # =====================================================================
 with tab2:
     st.markdown("### 📜 Complete Trade History")
-    try:
+    @st.cache_data(ttl=10)
+    def load_trade_history():
         conn = sqlite3.connect(DB_FILE, timeout=30.0)
-        trades_df = pd.read_sql_query("SELECT * FROM trades ORDER BY entry_time DESC", conn)
+        df = pd.read_sql_query("SELECT * FROM trades ORDER BY entry_time DESC", conn)
         conn.close()
+        return df
 
+    try:
+        trades_df = load_trade_history()
         if not trades_df.empty:
             st.dataframe(
                 trades_df.style.format({
@@ -2909,7 +2943,6 @@ with tab2:
                 use_container_width=True,
                 height=400
             )
-
             csv = trades_df.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Download Trade History (CSV)",
@@ -2924,21 +2957,24 @@ with tab2:
         st.error("Failed to load trade history from the database.")
 
 # =====================================================================
-# TAB 3: PERFORMANCE ANALYTICS
+# TAB 3: PERFORMANCE ANALYTICS (with caching – Fix 2)
 # =====================================================================
 with tab3:
     st.markdown("### 🏆 Performance & Strategy Analytics")
-    try:
+    @st.cache_data(ttl=10)
+    def load_closed_trades():
         conn = sqlite3.connect(DB_FILE, timeout=30.0)
-        closed_trades = pd.read_sql_query("SELECT * FROM trades WHERE status='CLOSED'", conn)
+        df = pd.read_sql_query("SELECT * FROM trades WHERE status='CLOSED'", conn)
         conn.close()
+        return df
 
+    try:
+        closed_trades = load_closed_trades()
         if not closed_trades.empty:
             total_trades = len(closed_trades)
             wins = len(closed_trades[closed_trades['result'] == 'WIN'])
             losses = len(closed_trades[closed_trades['result'] == 'LOSS'])
             win_rate = (wins / total_trades) * 100 if total_trades > 0 else 0.0
-            
             total_profit = closed_trades['profit_percent'].sum()
             avg_trade = closed_trades['profit_percent'].mean()
             best_trade = closed_trades['profit_percent'].max()
@@ -2962,7 +2998,7 @@ with tab3:
         st.error("Failed to compute performance analytics.")
 
 # =====================================================================
-# TAB 4: BACKTEST (COMPLETE)
+# TAB 4: BACKTEST (unchanged)
 # =====================================================================
 with tab4:
     st.markdown("### 📊 Strategy Backtest (Historical Accuracy Check)")
